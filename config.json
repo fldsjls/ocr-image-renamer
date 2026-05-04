@@ -1,0 +1,22 @@
+{
+  "fields": [
+    {
+      "key": "area",
+      "label": "施工区域",
+      "fallback": "未识别区域"
+    },
+    {
+      "key": "content",
+      "label": "施工内容",
+      "fallback": "未识别内容"
+    }
+  ],
+  "filename_template": "{area}_{content}",
+  "folder_template": "{area}/{content}",
+  "stop_labels": [
+    "施工区域",
+    "施工内容",
+    "天气",
+    "地点"
+  ]
+}

@@ -1,0 +1,23 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test and tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local OCR/image working folders
+待整理图片/
+整理后图片/
+
+# Local runtime/config noise
+*.log
+.DS_Store
+Thumbs.db
