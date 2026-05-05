@@ -52,7 +52,7 @@ DEFAULT_CONFIG = {
     "fields": [
         {
             "key": "project",
-            "keywords": ["妇幼保健院"],
+            "prefix_until_keywords": ["项目", "工程"],
             "fallback": "",
         },
         {"key": "area", "label": "施工区域", "fallback": ""},
@@ -114,8 +114,13 @@ def load_config(path: Path) -> dict:
     for field in config["fields"]:
         if "key" not in field:
             raise ValueError("fields 里的每一项都必须有 key。")
-        if "label" not in field and "regex" not in field and "keywords" not in field:
-            raise ValueError("fields 里的每一项都必须有 label、regex 或 keywords。")
+        if (
+            "label" not in field
+            and "regex" not in field
+            and "keywords" not in field
+            and "prefix_until_keywords" not in field
+        ):
+            raise ValueError("fields 里的每一项都必须有 label、regex、keywords 或 prefix_until_keywords。")
 
     # merged 先复制默认配置，再用 config.json 的内容覆盖。
     # 这样 config.json 只写一部分时，缺失项还能使用默认值。
@@ -287,6 +292,8 @@ def extract_values(text: str, config: dict) -> dict[str, str]:
 
         if "regex" in field:
             values[key] = extract_regex_field(text, field["regex"], fallback)
+        elif "prefix_until_keywords" in field:
+            values[key] = extract_prefix_until_keyword_field(text, field["prefix_until_keywords"], fallback)
         elif "keywords" in field:
             values[key] = extract_keyword_field(text, field["keywords"], fallback)
         else:
@@ -294,6 +301,25 @@ def extract_values(text: str, config: dict) -> dict[str, str]:
             values[key] = extract_field(text, label, stop_labels, fallback)
 
     return values
+
+
+# 函数作用：识别以某些关键词结尾的一段文字。
+# 例如 OCR 文字里有“第一医院改造项目”，关键词是“项目”，就返回“第一医院改造项目”。
+def extract_prefix_until_keyword_field(text: str, keywords: list[str], fallback: str) -> str:
+    """找到关键词，并返回这一行中关键词及其前面的所有文字。"""
+    compact_keywords = [normalize_text(keyword) for keyword in keywords if normalize_text(keyword)]
+
+    for line in text.splitlines():
+        compact_line = normalize_text(line).strip(" :：，,。;；")
+        if not compact_line:
+            continue
+
+        for keyword in compact_keywords:
+            index = compact_line.find(keyword)
+            if index >= 0:
+                return compact_line[: index + len(keyword)]
+
+    return fallback
 
 
 # 函数作用：从 OCR 文字里匹配固定关键词。

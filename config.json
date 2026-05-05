@@ -2,8 +2,10 @@
   "fields": [
     {
       "key": "project",
-      "keywords": [
-        "妇幼保健院"
+      "prefix_until_keywords": [
+        "项目",
+        "工程",
+        "院"
       ],
       "fallback": ""
     },
