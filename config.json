@@ -1,28 +1,35 @@
 ﻿{
   "fields": [
     {
+      "key": "project",
+      "keywords": [
+        "妇幼保健院"
+      ],
+      "fallback": ""
+    },
+    {
       "key": "area",
       "label": "施工区域",
-      "fallback": "未识别区域"
+      "fallback": ""
     },
     {
       "key": "date",
       "regex": "(20\\d{2}[./-]\\d{1,2}[./-]\\d{1,2})",
-      "fallback": "未识别日期"
+      "fallback": ""
     },
     {
       "key": "datetime",
       "regex": "(20\\d{2}[./-]\\d{1,2}[./-]\\d{1,2}\\s+\\d{1,2}:\\d{2})",
-      "fallback": "未识别时间"
+      "fallback": ""
     },
     {
       "key": "content",
       "label": "施工内容",
-      "fallback": "未识别内容"
+      "fallback": ""
     }
   ],
-  "filename_template": "{area}_{datetime}_{content}",
-  "folder_template": "{area}/{date}/{content}",
+  "filename_template": "{project}_{area}_{datetime}_{content}",
+  "folder_template": "{project}/{area}/{date}/{content}",
   "stop_labels": [
     "施工区域",
     "施工内容",

@@ -50,23 +50,28 @@ DEFAULT_CONFIG = {
     # fields 表示要从水印里提取哪些字段。
     # key 是程序内部代号，label 是图片水印上的字段名，fallback 是识别失败时使用的文字。
     "fields": [
-        {"key": "area", "label": "施工区域", "fallback": "未识别区域"},
+        {
+            "key": "project",
+            "keywords": ["妇幼保健院"],
+            "fallback": "",
+        },
+        {"key": "area", "label": "施工区域", "fallback": ""},
         {
             "key": "date",
             "regex": r"(20\d{2}[./-]\d{1,2}[./-]\d{1,2})",
-            "fallback": "未识别日期",
+            "fallback": "",
         },
         {
             "key": "datetime",
             "regex": r"(20\d{2}[./-]\d{1,2}[./-]\d{1,2}\s+\d{1,2}:\d{2})",
-            "fallback": "未识别时间",
+            "fallback": "",
         },
-        {"key": "content", "label": "施工内容", "fallback": "未识别内容"},
+        {"key": "content", "label": "施工内容", "fallback": ""},
     ],
     # 文件名模板。{datetime}、{area} 和 {content} 会被替换成识别出来的值。
-    "filename_template": "{area}_{datetime}_{content}",
+    "filename_template": "{project}_{area}_{datetime}_{content}",
     # 文件夹模板。斜杠 / 表示创建下一层文件夹。
-    "folder_template": "{area}/{date}/{content}",
+    "folder_template": "{project}/{area}/{date}/{content}",
     # stop_labels 用来告诉程序字段在哪里结束。
     # 例如识别“施工区域”时，遇到“施工内容”就停止。
     "stop_labels": ["施工区域", "施工内容", "天气", "地点"],
@@ -109,8 +114,8 @@ def load_config(path: Path) -> dict:
     for field in config["fields"]:
         if "key" not in field:
             raise ValueError("fields 里的每一项都必须有 key。")
-        if "label" not in field and "regex" not in field:
-            raise ValueError("fields 里的每一项都必须有 label 或 regex。")
+        if "label" not in field and "regex" not in field and "keywords" not in field:
+            raise ValueError("fields 里的每一项都必须有 label、regex 或 keywords。")
 
     # merged 先复制默认配置，再用 config.json 的内容覆盖。
     # 这样 config.json 只写一部分时，缺失项还能使用默认值。
@@ -243,9 +248,10 @@ def build_target_path(
 ) -> Path:
     """根据 OCR 文字和配置，生成图片最终要去的完整路径。"""
     values = extract_values(text, config)
-    safe_values = {key: sanitize_filename(value, "未识别") for key, value in values.items()}
+    safe_values = {key: sanitize_filename(value, "") for key, value in values.items()}
 
     raw_filename = render_template(config.get("filename_template", "{area}_{content}"), safe_values)
+    raw_filename = re.sub(r"_+", "_", raw_filename).strip("_")
     safe_filename = sanitize_filename(raw_filename, image_path.stem)
 
     if output_dir:
@@ -257,7 +263,9 @@ def build_target_path(
             target_parent = output_dir
             if folder_text:
                 for part in re.split(r"[/\\]+", folder_text):
-                    target_parent = target_parent / sanitize_filename(part, "未识别")
+                    safe_part = sanitize_filename(part, "")
+                    if safe_part:
+                        target_parent = target_parent / safe_part
     else:
         target_parent = image_path.parent
 
@@ -275,15 +283,31 @@ def extract_values(text: str, config: dict) -> dict[str, str]:
 
     for field in config["fields"]:
         key = field["key"]
-        fallback = field.get("fallback", "未识别")
+        fallback = field.get("fallback", "")
 
         if "regex" in field:
             values[key] = extract_regex_field(text, field["regex"], fallback)
+        elif "keywords" in field:
+            values[key] = extract_keyword_field(text, field["keywords"], fallback)
         else:
             label = field["label"]
             values[key] = extract_field(text, label, stop_labels, fallback)
 
     return values
+
+
+# 函数作用：从 OCR 文字里匹配固定关键词。
+# 例如 OCR 文字里包含“妇幼保健院”，就把 project 字段设为“妇幼保健院”。
+def extract_keyword_field(text: str, keywords: list[str], fallback: str) -> str:
+    """按关键词列表提取字段；匹配到哪个关键词，就返回哪个关键词。"""
+    compact_text = normalize_text(text)
+
+    for keyword in keywords:
+        compact_keyword = normalize_text(keyword)
+        if compact_keyword and compact_keyword in compact_text:
+            return keyword
+
+    return fallback
 
 
 # 函数作用：用正则表达式从 OCR 文字里提取字段。
