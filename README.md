@@ -41,6 +41,12 @@
 3. 双击 `预览识别结果.bat` 查看识别和命名结果。
 4. 确认无误后，双击 `开始整理图片.bat` 正式整理。
 
+也可以双击 `打开操作界面.bat` 使用图形界面。界面里可以选择图片文件夹、输出文件夹、配置文件，并切换 `OCR 识别整理` 或 `自动匹配已有文件夹` 两种模式。
+
+图形界面会自动检测电脑里是否有 `tesseract.exe`。如果没有检测到，`OCR 预处理` 会自动禁用，因为这个选项只对 Tesseract 备用识别路线有效；RapidOCR 路线会直接识别原图。
+
+图形界面里的配置文件一栏提供 `编辑` 按钮，可以直接修改 `config.json`。保存前会检查 JSON 格式和字段结构，避免配置写错后程序继续运行。
+
 PowerShell 中运行 `.bat` 文件时，需要加 `.\`：
 
 ```powershell
@@ -166,6 +172,36 @@ python .src/main.py --copy
 ```powershell
 python .src/main.py --no-folders
 ```
+
+按图片名自动匹配已有项目文件夹，不做 OCR：
+
+```powershell
+python .src/main.py --match-folders
+```
+
+这个模式会把 `待整理图片` 里的图片名和 `整理后图片` 下已有的项目文件夹名匹配。匹配成功就把图片放入对应文件夹，匹配失败就跳过，不会创建新项目文件夹。
+
+如果已有项目文件夹不在 `整理后图片`，可以指定文件夹根目录：
+
+```powershell
+python .src/main.py --match-folders --folder-root "D:\项目文件夹"
+```
+
+如果想弹出窗口选择图片所在文件夹，可以使用：
+
+```powershell
+python .src/main.py --match-folders --select-input
+```
+
+也可以直接双击 `自动匹配文件夹.bat`，选择图片文件夹后开始匹配。
+
+先 OCR 识别生成新图片名，再用新图片名匹配已有项目文件夹：
+
+```powershell
+python .src/main.py --ocr-match-folders
+```
+
+这个模式会先按 `config.json` 生成整理后的图片名，然后用这个新图片名去匹配 `整理后图片` 下已有的项目文件夹。匹配成功才移动/复制进去，匹配失败会跳过，不会创建新项目文件夹。
 
 ## 常见问题
 

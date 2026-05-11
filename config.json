@@ -3,9 +3,7 @@
     {
       "key": "project",
       "prefix_until_keywords": [
-        "项目",
-        "工程",
-        "院"
+        "海悦银河城"
       ],
       "fallback": ""
     },
