@@ -91,7 +91,8 @@ PowerShell 中运行 `.bat` 文件时，需要加 `.\`：
   ],
   "filename_template": "{project}_{area}_{datetime}_{content}",
   "folder_template": "{project}/{area}/{date}/{content}",
-  "stop_labels": ["施工区域", "施工内容", "天气", "地点"]
+  "stop_labels": ["施工区域", "施工内容", "天气", "地点"],
+  "avoid_keyword_fields": ["area", "content"]
 }
 ```
 
@@ -102,6 +103,15 @@ PowerShell 中运行 `.bat` 文件时，需要加 `.\`：
 - `regex`：按正则表达式提取，例如日期、时间。
 - `prefix_until_keywords`：找到关键词，并取关键词及其前面的文字，例如 `XX项目`、`XX工程`。
 - `fallback`：识别不到时的备用内容。当前为空，表示识别不到就不写入文件名。
+- `avoid_keyword_fields`：避免使用 `keywords` 快速匹配的字段，默认是 `area` 和 `content`。
+
+图形界面配置文件一栏提供 `避免匹配` 和 `快速添加`：
+
+- `避免匹配`：勾选后，该字段不会使用 `keywords` 做快速匹配。
+- `项目替换`：project 匹配成功后，会把项目名替换成这里填写的固定内容；这是单个值，保存新内容会覆盖旧内容，`重置` 会清空。
+- `快速添加`：`project` 会追加到 `prefix_until_keywords`；`area` 和 `content` 会修改对应 `label`；`stop_labels` 会追加字段结束标记。
+
+如果生成的新文件名为空、和原文件名一样，或只有日期/时间，程序会判定为失败并跳过，不会创建文件夹，也不会移动或复制图片。
 
 ## 修改文件夹结构
 

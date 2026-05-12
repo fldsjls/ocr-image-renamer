@@ -7,7 +7,7 @@ from config_loader import load_config
 from folder_matcher import collect_existing_folders, find_best_folder_match
 from image_files import iter_images
 from mode_options import OcrFolderMatchModeOptions
-from naming import build_safe_image_name, unique_path
+from naming import build_preview_image_name, build_safe_image_name, unique_path
 from ocr_engine import build_ocr, recognize_text
 from tesseract_detector import find_tesseract_cmd
 
@@ -36,7 +36,14 @@ def run_ocr_folder_match_mode(options: OcrFolderMatchModeOptions) -> None:
         total += 1
         try:
             text = recognize_text(ocr, image_path, preprocess)
-            new_name = build_safe_image_name(image_path, text, config)
+            try:
+                new_name = build_safe_image_name(image_path, text, config)
+            except ValueError as exc:
+                failed += 1
+                preview_name = build_preview_image_name(image_path, text, config)
+                print(f"[失败] {image_path.name} -> {preview_name}：{exc}")
+                print(f"识别文字：{text or '<空>'}")
+                continue
             matched_folder = find_best_folder_match(Path(new_name).stem, folders)
 
             if not matched_folder:

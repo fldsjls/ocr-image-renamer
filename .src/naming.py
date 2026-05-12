@@ -45,7 +45,21 @@ def build_target_path(
     config: dict,
 ) -> Path:
     """根据 OCR 文字和配置，生成图片最终要去的完整路径。"""
-    safe_filename = build_safe_image_stem(image_path, text, config)
+    target = build_preview_target_path(image_path, text, output_dir, no_folders, config)
+    safe_filename = build_safe_image_stem(image_path, text, config, validate=False)
+    validate_generated_stem(image_path, safe_filename)
+    return target
+
+
+def build_preview_target_path(
+    image_path: Path,
+    text: str,
+    output_dir: Path | None,
+    no_folders: bool,
+    config: dict,
+) -> Path:
+    """生成预览路径；即使文件名无效，也不在这里阻止输出预览。"""
+    safe_filename = build_safe_image_stem(image_path, text, config, validate=False)
     safe_values = build_safe_values(text, config)
 
     if output_dir:
@@ -74,18 +88,47 @@ def build_safe_image_name(image_path: Path, text: str, config: dict) -> str:
     return f"{safe_filename}{image_path.suffix.lower()}"
 
 
-def build_safe_image_stem(image_path: Path, text: str, config: dict) -> str:
+def build_preview_image_name(image_path: Path, text: str, config: dict) -> str:
+    """生成预览文件名，不做有效性校验。"""
+    safe_filename = build_safe_image_stem(image_path, text, config, validate=False)
+    return f"{safe_filename}{image_path.suffix.lower()}"
+
+
+def build_safe_image_stem(image_path: Path, text: str, config: dict, validate: bool = True) -> str:
     """根据 OCR 文字和配置，生成不含扩展名的安全文件名。"""
     safe_values = build_safe_values(text, config)
     raw_filename = render_template(config.get("filename_template", "{area}_{content}"), safe_values)
     raw_filename = re.sub(r"_+", "_", raw_filename).strip("_")
-    return sanitize_filename(raw_filename, image_path.stem)
+    safe_filename = sanitize_filename(raw_filename, image_path.stem)
+    if validate:
+        validate_generated_stem(image_path, safe_filename)
+    return safe_filename
 
 
 def build_safe_values(text: str, config: dict) -> dict[str, str]:
     """提取字段并清理成可用于文件名/文件夹名的安全值。"""
     values = extract_values(text, config)
     return {key: sanitize_filename(value, "") for key, value in values.items()}
+
+
+def validate_generated_stem(image_path: Path, stem: str) -> None:
+    """拒绝没有有效重命名结果的文件，避免误移动或创建目录。"""
+    if not stem:
+        raise ValueError("没有生成有效文件名，已跳过")
+
+    if stem.casefold() == image_path.stem.casefold():
+        raise ValueError("重命名结果和原文件名相同，已跳过")
+
+    if is_only_datetime_text(stem):
+        raise ValueError("重命名结果只有日期或时间，已跳过")
+
+
+def is_only_datetime_text(text: str) -> bool:
+    """判断文件名是否只有日期/时间成分，没有项目、区域、内容等有效文字。"""
+    cleaned = re.sub(r"20\d{2}[._-]\d{1,2}[._-]\d{1,2}", "", text)
+    cleaned = re.sub(r"\d{1,2}[_:：]\d{2}(?:[_:：]\d{2})?", "", cleaned)
+    cleaned = re.sub(r"[_\-.()\[\]（）【】\s]+", "", cleaned)
+    return not cleaned
 
 
 def render_template(template: str, values: dict[str, str]) -> str:

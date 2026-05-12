@@ -106,4 +106,20 @@ content = 暗门维修
 ["施工区域", "施工内容", "天气", "地点"]
 
 含义：提取“施工区域”时，遇到“施工内容/天气/地点”就停止，避免把后面的文字也吞进去。
+
+10. avoid_keyword_fields：避免关键字快速匹配的字段
+例子：
+["area", "content"]
+
+含义：勾选后的字段不会使用 keywords 快速匹配，默认避免匹配 area 和 content。
+
+11. replace_with：匹配成功后替换为固定内容
+例子：
+{
+  "key": "project",
+  "prefix_until_keywords": ["海悦银河城"],
+  "replace_with": "海悦银河城项目"
+}
+
+含义：project 匹配成功后，最终项目名会替换为 replace_with 填写的固定内容。
 """

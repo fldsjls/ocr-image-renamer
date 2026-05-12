@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
     "filename_template": "{project}_{area}_{datetime}_{content}",
     "folder_template": "{project}/{area}/{date}/{content}",
     "stop_labels": ["施工区域", "施工内容", "天气", "地点"],
+    "avoid_keyword_fields": ["area", "content"],
 }
 
 
@@ -73,3 +74,6 @@ def validate_config(config: dict) -> None:
             and "prefix_until_keywords" not in field
         ):
             raise ValueError("fields 里的每一项都必须有 label、regex、keywords 或 prefix_until_keywords。")
+
+    if "avoid_keyword_fields" in config and not isinstance(config["avoid_keyword_fields"], list):
+        raise ValueError("avoid_keyword_fields 必须是数组。")

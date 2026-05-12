@@ -13,6 +13,7 @@ def extract_values(text: str, config: dict) -> dict[str, str]:
     # stop_labels 用来判断一个字段在哪里结束，例如“施工区域”遇到“施工内容”就停止。
     labels = [field["label"] for field in config["fields"] if "label" in field]
     stop_labels = list(dict.fromkeys(labels + list(config.get("stop_labels", []))))
+    avoid_keyword_fields = set(config.get("avoid_keyword_fields", ["area", "content"]))
     values: dict[str, str] = {}
     # 对没有提示词、只靠空格/符号分隔的水印，提前拆成片段备用。
     loose_tokens = split_loose_watermark_text(text)
@@ -22,22 +23,49 @@ def extract_values(text: str, config: dict) -> dict[str, str]:
         fallback = field.get("fallback", "")
 
         # 每个字段先按 config.json 指定的常规规则提取。
-        if "regex" in field:
-            values[key] = extract_regex_field(text, field["regex"], fallback)
-        elif "prefix_until_keywords" in field:
-            values[key] = extract_prefix_until_keyword_field(text, field["prefix_until_keywords"], fallback)
-        elif "keywords" in field:
-            values[key] = extract_keyword_field(text, field["keywords"], fallback)
-        else:
-            label = field["label"]
-            values[key] = extract_field(text, label, stop_labels, fallback)
+        values[key] = extract_configured_field(text, field, stop_labels, fallback, avoid_keyword_fields)
 
         # 常规规则失败，或项目名疑似吞进日期/星期/水印相机时，再使用松散规则兜底。
-        loose_value = extract_loose_field(key, field, loose_tokens, values, fallback)
+        loose_value = extract_loose_field(key, field, loose_tokens, values, fallback, avoid_keyword_fields)
         if not values[key] or should_prefer_loose_value(key, values[key], loose_value):
             values[key] = loose_value
+        if key == "datetime" and not values[key] and values.get("date"):
+            values[key] = values["date"]
+        values[key] = apply_field_replacement(key, field, values[key])
 
     return values
+
+
+def apply_field_replacement(key: str, field: dict, value: str) -> str:
+    """字段匹配成功后，可按配置替换为固定内容。"""
+    replacement = field.get("replace_with", "")
+    if key == "project" and value and isinstance(replacement, str) and replacement.strip():
+        return replacement.strip()
+    return value
+
+
+def extract_configured_field(
+    text: str,
+    field: dict,
+    stop_labels: list[str],
+    fallback: str,
+    avoid_keyword_fields: set[str],
+) -> str:
+    """按字段主规则提取；主规则失败时，可用 keywords 作为快速补充匹配。"""
+    key = field["key"]
+    value = fallback
+
+    if "regex" in field:
+        value = extract_regex_field(text, field["regex"], fallback)
+    elif "prefix_until_keywords" in field:
+        value = extract_prefix_until_keyword_field(text, field["prefix_until_keywords"], fallback)
+    elif "label" in field:
+        value = extract_field(text, field["label"], stop_labels, fallback)
+
+    if (not value or value == fallback) and "keywords" in field and key not in avoid_keyword_fields:
+        return extract_keyword_field(text, field["keywords"], fallback)
+
+    return value
 
 
 def extract_prefix_until_keyword_field(text: str, keywords: list[str], fallback: str) -> str:
@@ -86,6 +114,7 @@ def extract_loose_field(
     tokens: list[str],
     values: dict[str, str],
     fallback: str,
+    avoid_keyword_fields: set[str],
 ) -> str:
     """无标签水印的兜底提取：从拆分片段里补日期、时间和项目名。"""
     if not tokens:
@@ -101,13 +130,13 @@ def extract_loose_field(
         time = first_matching_token(tokens, r"\d{1,2}:\d{2}", "")
         if date and time:
             return f"{date} {time}"
-        return fallback
+        return date or fallback
 
     # project 这类字段通常配置为 prefix_until_keywords，用拆分片段找更干净。
     if "prefix_until_keywords" in field:
         return extract_loose_prefix_until_keyword(tokens, field["prefix_until_keywords"], fallback)
 
-    if "keywords" in field:
+    if "keywords" in field and key not in avoid_keyword_fields:
         return extract_loose_keyword(tokens, field["keywords"], fallback)
 
     return fallback

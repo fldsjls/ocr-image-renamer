@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 
 from image_files import iter_images
-from naming import build_target_path
+from naming import build_preview_target_path, build_target_path
 from ocr_engine import build_ocr, recognize_text
 
 
@@ -34,7 +34,14 @@ def rename_images(
         try:
             # 每张图先识别文字，再把文字交给命名模块生成最终目标路径。
             text = recognize_text(ocr, image_path, preprocess)
-            target = build_target_path(image_path, text, output_dir, no_folders, config)
+            try:
+                target = build_target_path(image_path, text, output_dir, no_folders, config)
+            except ValueError as exc:
+                failed += 1
+                preview_target = build_preview_target_path(image_path, text, output_dir, no_folders, config)
+                print(f"[失败] {image_path.name} -> {preview_target}：{exc}")
+                print(f"识别文字：{text or '<空>'}")
+                continue
 
             # dry-run 只打印预览结果，不创建文件夹，也不移动/复制图片。
             if dry_run:
