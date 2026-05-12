@@ -3,9 +3,9 @@ cd /d "%~dp0"
 set "PYTHON_EXE=.venv\Scripts\python.exe"
 
 if exist "%PYTHON_EXE%" (
-  "%PYTHON_EXE%" .src\main.py --dry-run
+  "%PYTHON_EXE%" .src\main.py --dry-run --no-folders
 ) else (
-  py -3 .src\main.py --dry-run
-  if errorlevel 1 python .src\main.py --dry-run
+  py -3 .src\main.py --dry-run --no-folders
+  if errorlevel 1 python .src\main.py --dry-run --no-folders
 )
 pause

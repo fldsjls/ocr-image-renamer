@@ -17,6 +17,7 @@ from .config_help import CONFIG_HELP_TEXT
 
 # gui/app.py 是给普通用户使用的图形外壳。
 # 它不重新实现整理逻辑，只把界面上的选项转换成 processor/folder_matcher 的参数。
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 class QueueWriter:
     """把 print 输出转发到队列，供主线程安全写入界面。"""
@@ -48,9 +49,9 @@ class App(tk.Tk):
         self.worker: threading.Thread | None = None
         self.detected_tesseract: Path | None = find_tesseract_cmd()
 
-        self.input_var = tk.StringVar(value=str(Path("待整理图片").resolve()))
-        self.output_var = tk.StringVar(value=str(Path("整理后图片").resolve()))
-        self.config_var = tk.StringVar(value=str(Path("config.json").resolve()))
+        self.input_var = tk.StringVar(value=str(PROJECT_ROOT / "待整理图片"))
+        self.output_var = tk.StringVar(value=str(PROJECT_ROOT / "整理后图片"))
+        self.config_var = tk.StringVar(value=str(PROJECT_ROOT / "config.json"))
         self.tesseract_var = tk.StringVar(value=str(self.detected_tesseract) if self.detected_tesseract else "")
         self.lang_var = tk.StringVar(value="chi_sim+eng")
         self.mode_var = tk.StringVar(value="ocr")
@@ -59,7 +60,7 @@ class App(tk.Tk):
         self.copy_var = tk.BooleanVar(value=False)
         self.recursive_var = tk.BooleanVar(value=False)
         self.preprocess_var = tk.BooleanVar(value=False)
-        self.no_folders_var = tk.BooleanVar(value=False)
+        self.no_folders_var = tk.BooleanVar(value=True)
 
         self.build_ui()
         if not self.detected_tesseract:
