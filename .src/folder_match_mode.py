@@ -16,4 +16,5 @@ def run_folder_match_mode(options: FolderMatchModeOptions) -> None:
         recursive=options.recursive,
         dry_run=options.dry_run,
         copy_files=options.copy_files,
+        cancel_check=options.cancel_check,
     )

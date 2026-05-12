@@ -33,9 +33,16 @@ def run_ocr_folder_match_mode(options: OcrFolderMatchModeOptions) -> None:
     total = matched = skipped = failed = 0
 
     for image_path in iter_images(options.input_dir, options.recursive):
+        if options.cancel_check and options.cancel_check():
+            print("\n[停止] 已停止运行。")
+            break
+
         total += 1
         try:
             text = recognize_text(ocr, image_path, preprocess)
+            if options.cancel_check and options.cancel_check():
+                print("\n[停止] 已停止运行。")
+                break
             try:
                 new_name = build_safe_image_name(image_path, text, config)
             except ValueError as exc:

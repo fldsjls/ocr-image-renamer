@@ -23,6 +23,7 @@ def rename_images(
     dry_run: bool,
     copy_files: bool,
     no_folders: bool,
+    cancel_check=None,
 ):
     """主处理流程：找图片、OCR、生成目标路径、复制或移动。"""
     # OCR 引擎只初始化一次，避免每处理一张图都重复加载模型。
@@ -30,10 +31,17 @@ def rename_images(
     total = renamed = failed = 0
 
     for image_path in iter_images(input_dir, recursive):
+        if cancel_check and cancel_check():
+            print("\n[停止] 已停止运行。")
+            break
+
         total += 1
         try:
             # 每张图先识别文字，再把文字交给命名模块生成最终目标路径。
             text = recognize_text(ocr, image_path, preprocess)
+            if cancel_check and cancel_check():
+                print("\n[停止] 已停止运行。")
+                break
             try:
                 target = build_target_path(image_path, text, output_dir, no_folders, config)
             except ValueError as exc:

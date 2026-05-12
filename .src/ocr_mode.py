@@ -30,4 +30,5 @@ def run_ocr_mode(options: OcrModeOptions) -> None:
         dry_run=options.dry_run,
         copy_files=options.copy_files,
         no_folders=options.no_folders,
+        cancel_check=options.cancel_check,
     )

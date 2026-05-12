@@ -2,8 +2,10 @@
 
 import contextlib
 from copy import deepcopy
+from datetime import date
 import json
 import queue
+import re
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -48,6 +50,7 @@ class App(tk.Tk):
 
         self.output_queue: queue.Queue[str] = queue.Queue()
         self.worker: threading.Thread | None = None
+        self.stop_event = threading.Event()
         self.detected_tesseract: Path | None = find_tesseract_cmd()
 
         self.input_var = tk.StringVar(value=str(PROJECT_ROOT / "待整理图片"))
@@ -57,6 +60,7 @@ class App(tk.Tk):
         self.lang_var = tk.StringVar(value="chi_sim+eng")
         self.mode_var = tk.StringVar(value="ocr")
         self.project_replace_var = tk.StringVar()
+        self.default_date_var = tk.StringVar(value=date.today().strftime("%Y.%m.%d"))
 
         self.dry_run_var = tk.BooleanVar(value=True)
         self.copy_var = tk.BooleanVar(value=False)
@@ -65,6 +69,7 @@ class App(tk.Tk):
         self.preprocess_var = tk.BooleanVar(value=False)
         self.no_folders_var = tk.BooleanVar(value=True)
         self.stop_label_match_var = tk.BooleanVar(value=False)
+        self.default_date_enabled_var = tk.BooleanVar(value=True)
 
         self.build_ui()
         self.load_config_state()
@@ -130,15 +135,18 @@ class App(tk.Tk):
 
         config_actions = ttk.Frame(mode_frame)
         config_actions.grid(row=3, column=0, columnspan=3, sticky="w", pady=(10, 0))
-        ttk.Button(config_actions, text="编辑", command=self.open_config_editor).grid(row=0, column=0, padx=(0, 10))
-        ttk.Button(config_actions, text="忽视词", command=self.open_ignore_word_editor).grid(row=0, column=1, padx=(0, 10))
-        ttk.Button(config_actions, text="避免匹配", command=self.open_avoid_keyword_editor).grid(row=0, column=2, padx=(0, 10))
-        ttk.Button(config_actions, text="快速添加", command=self.open_keyword_adder).grid(row=0, column=3, padx=(0, 18))
+        ttk.Button(config_actions, text="编辑", command=self.open_config_editor).grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        ttk.Button(config_actions, text="忽视词", command=self.open_ignore_word_editor).grid(row=0, column=1, sticky="ew", padx=(0, 10))
+        ttk.Button(config_actions, text="避免匹配", command=self.open_avoid_keyword_editor).grid(row=0, column=2, sticky="ew", padx=(0, 10))
+        ttk.Button(config_actions, text="快速添加", command=self.open_keyword_adder).grid(row=0, column=3, sticky="ew", padx=(0, 18))
         ttk.Checkbutton(config_actions, text="停止标签", variable=self.stop_label_match_var, command=self.save_stop_label_match).grid(row=0, column=4, padx=(0, 10))
-        ttk.Label(config_actions, text="项目替换").grid(row=1, column=0, sticky="w", pady=(8, 0), padx=(0, 6))
-        ttk.Entry(config_actions, textvariable=self.project_replace_var, width=24).grid(row=1, column=1, columnspan=2, sticky="w", pady=(8, 0))
-        ttk.Button(config_actions, text="保存", command=self.save_project_replace).grid(row=1, column=3, pady=(8, 0), padx=(8, 0))
-        ttk.Button(config_actions, text="重置", command=self.reset_project_replace).grid(row=1, column=4, pady=(8, 0), padx=(8, 0))
+        ttk.Checkbutton(config_actions, text="补全日期", variable=self.default_date_enabled_var, command=self.save_default_date_settings).grid(row=0, column=5, padx=(0, 10))
+        ttk.Label(config_actions, text="项目替换", anchor="center").grid(row=1, column=0, sticky="ew", pady=(8, 0), padx=(0, 10))
+        ttk.Entry(config_actions, textvariable=self.project_replace_var, width=16).grid(row=1, column=1, sticky="ew", pady=(8, 0), padx=(0, 10))
+        ttk.Button(config_actions, text="保存", command=self.save_project_replace).grid(row=1, column=2, sticky="ew", pady=(8, 0), padx=(0, 10))
+        ttk.Button(config_actions, text="重置", command=self.reset_project_replace).grid(row=1, column=3, sticky="ew", pady=(8, 0), padx=(0, 18))
+        ttk.Label(config_actions, text="补全日期").grid(row=1, column=5, sticky="w", pady=(8, 0), padx=(14, 6))
+        ttk.Entry(config_actions, textvariable=self.default_date_var, width=14).grid(row=1, column=6, sticky="w", pady=(8, 0))
 
         output_frame = ttk.LabelFrame(self, text="运行输出", padding=8)
         output_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
@@ -152,7 +160,10 @@ class App(tk.Tk):
         actions.columnconfigure(0, weight=1)
         self.run_button = ttk.Button(actions, text="开始运行", command=self.start_run)
         self.run_button.grid(row=0, column=1, padx=(8, 0))
-        ttk.Button(actions, text="清空输出", command=self.clear_output).grid(row=0, column=2, padx=(8, 0))
+        self.stop_button = ttk.Button(actions, text="停止运行", command=self.stop_run)
+        self.stop_button.grid(row=0, column=2, padx=(8, 0))
+        self.stop_button.configure(state="disabled")
+        ttk.Button(actions, text="清空输出", command=self.clear_output).grid(row=0, column=3, padx=(8, 0))
 
     # 打开文件夹选择框，并把结果写回指定变量。
     def choose_folder(self, variable: tk.StringVar) -> None:
@@ -216,12 +227,17 @@ class App(tk.Tk):
         except ValueError:
             self.project_replace_var.set("")
             self.stop_label_match_var.set(False)
+            self.default_date_var.set(date.today().strftime("%Y.%m.%d"))
+            self.default_date_enabled_var.set(True)
             return
 
         field = next((item for item in config.get("fields", []) if item.get("key") == "project"), None)
         replacement = field.get("replace_with", "") if isinstance(field, dict) else ""
         self.project_replace_var.set(replacement if isinstance(replacement, str) else "")
         self.stop_label_match_var.set(bool(config.get("enable_stop_label_match", False)))
+        default_date = str(config.get("default_date", "")).strip() or date.today().strftime("%Y.%m.%d")
+        self.default_date_var.set(default_date)
+        self.default_date_enabled_var.set(bool(config.get("enable_default_date", False)))
 
     def save_project_replace(self) -> None:
         self.update_project_replace(self.project_replace_var.get().strip(), "已更新项目替换", "项目替换已保存。")
@@ -273,6 +289,31 @@ class App(tk.Tk):
 
         state_text = "开启" if self.stop_label_match_var.get() else "关闭"
         self.write_output(f"[配置] 停止标签匹配已{state_text}\n")
+
+    def save_default_date_settings(self) -> bool:
+        """保存主界面日期补全开关和日期值。"""
+        try:
+            config_path, config = self.read_current_config()
+        except ValueError as exc:
+            messagebox.showerror("配置错误", str(exc), parent=self)
+            return False
+
+        default_date = self.default_date_var.get().strip()
+        if self.default_date_enabled_var.get() and not is_valid_default_date(default_date):
+            messagebox.showerror("日期格式错误", "补全日期格式应类似：2026.05.12", parent=self)
+            return False
+
+        config["enable_default_date"] = self.default_date_enabled_var.get()
+        config["default_date"] = default_date
+        try:
+            self.save_current_config(config_path, config)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("保存失败", str(exc), parent=self)
+            return False
+
+        state_text = "开启" if self.default_date_enabled_var.get() else "关闭"
+        self.write_output(f"[配置] 补全日期已{state_text}：{default_date or '无'}\n")
+        return True
 
     # 打开字段关键字匹配的排除菜单。
     def open_avoid_keyword_editor(self) -> None:
@@ -352,10 +393,19 @@ class App(tk.Tk):
             messagebox.showerror("参数错误", str(exc))
             return
 
+        self.stop_event.clear()
         self.run_button.configure(state="disabled")
+        self.stop_button.configure(state="normal")
         self.write_output("\n========== 开始运行 ==========\n")
         self.worker = threading.Thread(target=self.run_task, args=(options,), daemon=True)
         self.worker.start()
+
+    def stop_run(self) -> None:
+        """请求后台任务在当前图片处理完成后停止。"""
+        if self.worker and self.worker.is_alive():
+            self.stop_event.set()
+            self.stop_button.configure(state="disabled")
+            self.write_output("\n[停止] 已请求停止运行，当前图片处理完成后会停止。\n")
 
     # 从界面读取参数并转换成对应模式的选项对象。
     def collect_options(self) -> OcrModeOptions | FolderMatchModeOptions | OcrFolderMatchModeOptions:
@@ -368,6 +418,10 @@ class App(tk.Tk):
             raise ValueError(f"图片文件夹不存在：{input_dir}")
 
         mode = self.mode_var.get()
+
+        if mode in {"ocr", "ocr_match"}:
+            if not self.save_default_date_settings():
+                raise ValueError("日期补全设置未保存，已取消运行。")
 
         if mode in {"match", "ocr_match"} and (not output_dir.exists() or not output_dir.is_dir()):
             raise ValueError(f"项目文件夹不存在：{output_dir}")
@@ -382,6 +436,7 @@ class App(tk.Tk):
                 recursive=self.recursive_var.get(),
                 dry_run=self.dry_run_var.get(),
                 copy_files=self.copy_var.get(),
+                cancel_check=self.stop_event.is_set,
             )
 
         if mode == "ocr_match":
@@ -395,6 +450,7 @@ class App(tk.Tk):
                 preprocess=self.preprocess_var.get(),
                 dry_run=self.dry_run_var.get(),
                 copy_files=self.copy_var.get(),
+                cancel_check=self.stop_event.is_set,
             )
 
         return OcrModeOptions(
@@ -408,6 +464,7 @@ class App(tk.Tk):
             dry_run=self.dry_run_var.get(),
             copy_files=self.copy_var.get(),
             no_folders=self.no_folders_var.get(),
+            cancel_check=self.stop_event.is_set,
         )
 
     # 在线程中调用模式执行器，并把输出重定向到界面。
@@ -431,6 +488,7 @@ class App(tk.Tk):
                 text = self.output_queue.get_nowait()
                 if text == "__TASK_DONE__":
                     self.run_button.configure(state="normal")
+                    self.stop_button.configure(state="disabled")
                 else:
                     self.write_output(text)
         except queue.Empty:
@@ -837,6 +895,11 @@ def center_window_on_parent(window: tk.Toplevel, parent: tk.Tk) -> None:
     x = parent_x + (parent_width - window_width) // 2
     y = parent_y + (parent_height - window_height) // 2
     window.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+
+
+def is_valid_default_date(value: str) -> bool:
+    """校验日期补全输入。"""
+    return bool(re.fullmatch(r"20\d{2}[./-]\d{1,2}[./-]\d{1,2}", value.strip()))
 
 
 if __name__ == "__main__":

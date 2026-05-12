@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,11 +25,13 @@ class OcrModeOptions(CommonOptions):
     tesseract_cmd: Path | None
     preprocess: bool
     no_folders: bool
+    cancel_check: Callable[[], bool] | None = None
 
 
 @dataclass(frozen=True)
 class FolderMatchModeOptions(CommonOptions):
     folder_root: Path
+    cancel_check: Callable[[], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -38,3 +41,4 @@ class OcrFolderMatchModeOptions(CommonOptions):
     lang: str
     tesseract_cmd: Path | None
     preprocess: bool
+    cancel_check: Callable[[], bool] | None = None

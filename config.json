@@ -52,6 +52,8 @@
     "水印",
     "相机"
   ],
+  "default_date": "2026.05.12",
+  "enable_default_date": false,
   "enable_stop_label_match": false,
   "avoid_keyword_fields": [
     "area",

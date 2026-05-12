@@ -26,7 +26,8 @@ def extract_values(text: str, config: dict) -> dict[str, str]:
         fallback = field.get("fallback", "")
 
         if key == "date":
-            value = extract_date(cleaned_text, field, fallback)
+            default_date = config.get("default_date", "") if config.get("enable_default_date", False) else ""
+            value = extract_date(cleaned_text, field, fallback, default_date)
         elif key == "datetime":
             value = extract_datetime(cleaned_text, field, values, fallback)
         elif key == "project":
@@ -62,13 +63,14 @@ def clean_ocr_text(text: str, ignore_words: list[str]) -> str:
     return "".join(kept_lines)
 
 
-def extract_date(text: str, field: dict, fallback: str) -> str:
-    """优先按字段 regex 提取日期，失败时使用默认日期格式。"""
+def extract_date(text: str, field: dict, fallback: str, default_date: str = "") -> str:
+    """优先按 OCR 文本提取日期，失败时使用界面设置的补全日期。"""
     if "regex" in field:
         value = extract_regex_field(text, field["regex"], "")
         if value:
             return value
-    return extract_regex_field(text, r"(20\d{2}[./-]\d{1,2}[./-]\d{1,2})", fallback)
+    value = extract_regex_field(text, r"(20\d{2}[./-]\d{1,2}[./-]\d{1,2})", "")
+    return value or normalize_default_date(default_date) or fallback
 
 
 def extract_datetime(text: str, field: dict, values: dict[str, str], fallback: str) -> str:
@@ -229,3 +231,11 @@ def apply_field_replacement(key: str, field: dict, value: str) -> str:
 def normalize_text(text: str) -> str:
     """去掉空白，方便容错匹配 OCR 文字。"""
     return re.sub(r"\s+", "", str(text))
+
+
+def normalize_default_date(value: str) -> str:
+    """校验并清理界面输入的日期补全值。"""
+    value = str(value).strip()
+    if re.fullmatch(r"20\d{2}[./-]\d{1,2}[./-]\d{1,2}", value):
+        return value
+    return ""

@@ -38,6 +38,7 @@ def match_images_to_existing_folders(
     recursive: bool,
     dry_run: bool,
     copy_files: bool,
+    cancel_check=None,
 ):
     """把图片按文件名匹配到 folder_root 下面已有的文件夹。"""
     folders = collect_existing_folders(folder_root)
@@ -46,6 +47,10 @@ def match_images_to_existing_folders(
 
     total = matched = skipped = failed = 0
     for image_path in iter_images(input_dir, recursive):
+        if cancel_check and cancel_check():
+            print("\n[停止] 已停止运行。")
+            break
+
         total += 1
         folder = find_best_folder_match(image_path.stem, folders)
         if not folder:
