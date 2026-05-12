@@ -48,6 +48,11 @@
     "天气",
     "地点"
   ],
+  "ignore_words": [
+    "水印",
+    "相机"
+  ],
+  "enable_stop_label_match": false,
   "avoid_keyword_fields": [
     "area",
     "content"

@@ -64,9 +64,10 @@ class App(tk.Tk):
         self.recursive_var = tk.BooleanVar(value=False)
         self.preprocess_var = tk.BooleanVar(value=False)
         self.no_folders_var = tk.BooleanVar(value=True)
+        self.stop_label_match_var = tk.BooleanVar(value=False)
 
         self.build_ui()
-        self.load_project_replace()
+        self.load_config_state()
         if not self.detected_tesseract:
             self.preprocess_var.set(False)
         self.update_mode_controls()
@@ -130,12 +131,14 @@ class App(tk.Tk):
         config_actions = ttk.Frame(mode_frame)
         config_actions.grid(row=3, column=0, columnspan=3, sticky="w", pady=(10, 0))
         ttk.Button(config_actions, text="编辑", command=self.open_config_editor).grid(row=0, column=0, padx=(0, 10))
-        ttk.Button(config_actions, text="避免匹配", command=self.open_avoid_keyword_editor).grid(row=0, column=1, padx=(0, 10))
-        ttk.Button(config_actions, text="快速添加", command=self.open_keyword_adder).grid(row=0, column=2)
-        ttk.Label(config_actions, text="项目替换").grid(row=0, column=3, sticky="w", padx=(18, 6))
-        ttk.Entry(config_actions, textvariable=self.project_replace_var, width=24).grid(row=0, column=4, sticky="w")
-        ttk.Button(config_actions, text="保存", command=self.save_project_replace).grid(row=0, column=5, padx=(8, 0))
-        ttk.Button(config_actions, text="重置", command=self.reset_project_replace).grid(row=0, column=6, padx=(8, 0))
+        ttk.Button(config_actions, text="忽视词", command=self.open_ignore_word_editor).grid(row=0, column=1, padx=(0, 10))
+        ttk.Button(config_actions, text="避免匹配", command=self.open_avoid_keyword_editor).grid(row=0, column=2, padx=(0, 10))
+        ttk.Button(config_actions, text="快速添加", command=self.open_keyword_adder).grid(row=0, column=3, padx=(0, 18))
+        ttk.Checkbutton(config_actions, text="停止标签", variable=self.stop_label_match_var, command=self.save_stop_label_match).grid(row=0, column=4, padx=(0, 10))
+        ttk.Label(config_actions, text="项目替换").grid(row=1, column=0, sticky="w", pady=(8, 0), padx=(0, 6))
+        ttk.Entry(config_actions, textvariable=self.project_replace_var, width=24).grid(row=1, column=1, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Button(config_actions, text="保存", command=self.save_project_replace).grid(row=1, column=3, pady=(8, 0), padx=(8, 0))
+        ttk.Button(config_actions, text="重置", command=self.reset_project_replace).grid(row=1, column=4, pady=(8, 0), padx=(8, 0))
 
         output_frame = ttk.LabelFrame(self, text="运行输出", padding=8)
         output_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
@@ -162,7 +165,7 @@ class App(tk.Tk):
         selected = filedialog.askopenfilename(title="请选择配置文件", filetypes=[("JSON 文件", "*.json"), ("所有文件", "*.*")])
         if selected:
             self.config_var.set(selected)
-            self.load_project_replace()
+            self.load_config_state()
 
     # 读取当前配置文件内容，并打开配置编辑窗口。
     def open_config_editor(self) -> None:
@@ -206,16 +209,19 @@ class App(tk.Tk):
         config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
         self.config_var.set(str(config_path.resolve()))
 
-    def load_project_replace(self) -> None:
+    def load_config_state(self) -> None:
+        """从配置文件同步主窗口上的快捷配置状态。"""
         try:
             _config_path, config = self.read_current_config()
         except ValueError:
             self.project_replace_var.set("")
+            self.stop_label_match_var.set(False)
             return
 
         field = next((item for item in config.get("fields", []) if item.get("key") == "project"), None)
         replacement = field.get("replace_with", "") if isinstance(field, dict) else ""
         self.project_replace_var.set(replacement if isinstance(replacement, str) else "")
+        self.stop_label_match_var.set(bool(config.get("enable_stop_label_match", False)))
 
     def save_project_replace(self) -> None:
         self.update_project_replace(self.project_replace_var.get().strip(), "已更新项目替换", "项目替换已保存。")
@@ -250,6 +256,24 @@ class App(tk.Tk):
         self.write_output(f"[配置] {output_prefix}：{replacement or '无'}\n")
         messagebox.showinfo("保存成功", success_text, parent=self)
 
+    def save_stop_label_match(self) -> None:
+        """保存主界面“停止标签”复选框状态。"""
+        try:
+            config_path, config = self.read_current_config()
+        except ValueError as exc:
+            messagebox.showerror("配置错误", str(exc), parent=self)
+            return
+
+        config["enable_stop_label_match"] = self.stop_label_match_var.get()
+        try:
+            self.save_current_config(config_path, config)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("保存失败", str(exc), parent=self)
+            return
+
+        state_text = "开启" if self.stop_label_match_var.get() else "关闭"
+        self.write_output(f"[配置] 停止标签匹配已{state_text}\n")
+
     # 打开字段关键字匹配的排除菜单。
     def open_avoid_keyword_editor(self) -> None:
         try:
@@ -259,6 +283,16 @@ class App(tk.Tk):
             return
 
         AvoidKeywordEditor(self, config_path, config)
+
+    # 打开忽视词编辑窗口。
+    def open_ignore_word_editor(self) -> None:
+        try:
+            config_path, config = self.read_current_config()
+        except ValueError as exc:
+            messagebox.showerror("配置错误", str(exc), parent=self)
+            return
+
+        IgnoreWordEditor(self, config_path, config)
 
     # 打开快速添加配置窗口。
     def open_keyword_adder(self) -> None:
@@ -437,6 +471,61 @@ class App(tk.Tk):
             self.write_output("[检测] 未找到 tesseract.exe，OCR 预处理已禁用。\n")
 
 
+class IgnoreWordEditor(tk.Toplevel):
+    """追加 OCR 清洗阶段要整行丢弃的忽视词。"""
+
+    def __init__(self, parent: App, config_path: Path, config: dict) -> None:
+        super().__init__(parent)
+        self.parent = parent
+        self.config_path = config_path
+        self.config = config
+        self.title("忽视词")
+        self.geometry("430x180")
+        self.minsize(380, 160)
+        self.transient(parent)
+        self.word_var = tk.StringVar()
+
+        body = ttk.Frame(self, padding=12)
+        body.grid(row=0, column=0, sticky="nsew")
+        self.columnconfigure(0, weight=1)
+        body.columnconfigure(1, weight=1)
+
+        ttk.Label(body, text="忽视词").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Entry(body, textvariable=self.word_var).grid(row=0, column=1, sticky="ew", pady=4)
+        ttk.Label(body, text="保存后会追加到 ignore_words；命中该词的 OCR 行会被丢弃。").grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+        actions = ttk.Frame(body)
+        actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(14, 0))
+        actions.columnconfigure(0, weight=1)
+        ttk.Button(actions, text="保存", command=self.save).grid(row=0, column=1, padx=(8, 0))
+        ttk.Button(actions, text="关闭", command=self.destroy).grid(row=0, column=2, padx=(8, 0))
+
+        center_window_on_parent(self, parent)
+        self.grab_set()
+
+    def save(self) -> None:
+        word = self.word_var.get().strip()
+        if not word:
+            messagebox.showerror("参数错误", "忽视词不能为空。", parent=self)
+            return
+
+        words = self.config.setdefault("ignore_words", [])
+        if not isinstance(words, list):
+            messagebox.showerror("配置错误", "ignore_words 必须是数组。", parent=self)
+            return
+        if word not in words:
+            words.append(word)
+        try:
+            self.parent.save_current_config(self.config_path, self.config)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("保存失败", str(exc), parent=self)
+            return
+
+        self.parent.write_output(f"[配置] 已添加忽视词：{word}\n")
+        messagebox.showinfo("保存成功", "忽视词已保存。", parent=self)
+        self.destroy()
+
+
 class AvoidKeywordEditor(tk.Toplevel):
     """配置哪些字段不参与 keywords 快速匹配。"""
 
@@ -495,7 +584,7 @@ class AvoidKeywordEditor(tk.Toplevel):
 class KeywordAdder(tk.Toplevel):
     """快速修改常用匹配配置。"""
 
-    FIELD_CHOICES = ["project", "area", "content", "stop_labels"]
+    FIELD_CHOICES = ["project", "area", "content", "stop_labels", "ignore_words"]
 
     def __init__(self, parent: App, config_path: Path, config: dict) -> None:
         super().__init__(parent)
@@ -548,6 +637,9 @@ class KeywordAdder(tk.Toplevel):
         elif key == "stop_labels":
             self.value_label.configure(text="结束标记")
             self.hint.configure(text="保存后会追加到顶层 stop_labels 列表。")
+        elif key == "ignore_words":
+            self.value_label.configure(text="忽视词")
+            self.hint.configure(text="保存后会追加到顶层 ignore_words 列表；命中该词的 OCR 行会被丢弃。")
         else:
             self.value_label.configure(text="内容")
             self.hint.configure(text="")
@@ -572,6 +664,16 @@ class KeywordAdder(tk.Toplevel):
             action_text = f"已添加结束标记：{value}"
             success_text = "结束标记已保存。"
             self.save_and_close(action_text, success_text)
+            return
+
+        if key == "ignore_words":
+            ignore_words = self.config.setdefault("ignore_words", [])
+            if not isinstance(ignore_words, list):
+                messagebox.showerror("配置错误", "ignore_words 必须是数组。", parent=self)
+                return
+            if value not in ignore_words:
+                ignore_words.append(value)
+            self.save_and_close(f"已添加忽视词：{value}", "忽视词已保存。")
             return
 
         field = next((item for item in self.config.get("fields", []) if item.get("key") == key), None)

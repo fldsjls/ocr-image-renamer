@@ -34,6 +34,8 @@ DEFAULT_CONFIG = {
     "filename_template": "{project}_{area}_{datetime}_{content}",
     "folder_template": "{project}/{area}/{date}/{content}",
     "stop_labels": ["施工区域", "施工内容", "天气", "地点"],
+    "ignore_words": ["水印", "相机"],
+    "enable_stop_label_match": False,
     "avoid_keyword_fields": ["area", "content"],
 }
 
@@ -77,3 +79,7 @@ def validate_config(config: dict) -> None:
 
     if "avoid_keyword_fields" in config and not isinstance(config["avoid_keyword_fields"], list):
         raise ValueError("avoid_keyword_fields 必须是数组。")
+    if "ignore_words" in config and not isinstance(config["ignore_words"], list):
+        raise ValueError("ignore_words 必须是数组。")
+    if "enable_stop_label_match" in config and not isinstance(config["enable_stop_label_match"], bool):
+        raise ValueError("enable_stop_label_match 必须是 true 或 false。")

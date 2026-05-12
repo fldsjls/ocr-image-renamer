@@ -1,125 +1,85 @@
 from __future__ import annotations
 
 
-# config_help.py 存放配置编辑窗口右侧/下方的说明文字。
-# 把大段说明从 app.py 里拿出来，避免 GUI 主文件过长。
+# config_help.py 存放配置编辑窗口中的说明文字，避免主界面文件过长。
 
-CONFIG_HELP_TEXT = """配置文件主要分为 4 块：
+CONFIG_HELP_TEXT = """配置文件主要控制 OCR 文本如何清洗、匹配和命名。
 
-1. fields：告诉程序从 OCR 文字里提取哪些字段
-每个字段至少需要 key，并选择一种匹配方式。
+1. ignore_words：忽视词
+OCR 得到带换行的文本后，会先逐行检查。某一行只要包含 ignore_words 中任意一个词，这一整行就会被丢弃。
 
-常见字段：
-- project：项目名
-- area：施工区域
-- date：日期
-- datetime：日期时间
-- content：施工内容
-
-2. label：按提示词提取
-适合水印里有固定提示词的情况，例如：
-施工区域: 5层
-施工内容: 暗门维修
-
-配置例子：
+例子：
 {
-  "key": "area",
-  "label": "施工区域",
-  "fallback": ""
+  "ignore_words": ["水印相机"]
 }
 
-含义：找到“施工区域”后面的内容，直到遇到下一个 stop_labels。
+2. 换行处理
+忽视词删行完成后，程序会把剩余行取消换行并拼成一段，再进入字段匹配。
 
-3. regex：按正则表达式提取
-适合日期、时间、编号这类格式稳定的内容。
-
-配置例子：
-{
-  "key": "date",
-  "regex": "(20\\\\d{2}[./-]\\\\d{1,2}[./-]\\\\d{1,2})",
-  "fallback": ""
-}
-
-可匹配：
+3. date / datetime：默认自动匹配
+date 默认匹配：
 2026.05.04
 2026-05-04
 2026/5/4
 
-4. prefix_until_keywords：取关键词以及关键词前面的文字
-适合项目名，例如“成都医院改造项目”“樊华似锦2期”。
+datetime 会优先按配置 regex 匹配；如果匹配不到，会自动用 date + 时间拼成：
+2026.05.04 04:01
 
-配置例子：
+4. project：关键字匹配
+project 会优先读取 keywords 或 prefix_until_keywords 中的项目关键字。
+匹配成功后，从命中的关键字开始，取到下一个符号、日期、时间、停止词前，作为项目名。
+
+例子：
 {
   "key": "project",
-  "prefix_until_keywords": ["项目", "工程", "院", "期"],
+  "prefix_until_keywords": ["樊华似锦2期", "樊华广场"],
   "fallback": ""
 }
 
-含义：某一行里找到“项目/工程/院/期”后，取它前面的文字和关键词本身。
+如果 OCR 文本中有：
+绵阳市·樊华似锦2期 2026.05.04
 
-5. keywords：固定关键词匹配
-适合你提前知道项目名或区域名，只想判断是否出现。
+匹配到“樊华似锦2期”后，project 会取：
+樊华似锦2期
 
-配置例子：
+5. enable_stop_label_match：停止标签匹配开关
+默认 false。
+关闭时，施工区域、施工内容这类 label 不会按旧标签逻辑自动提取。
+开启后，才会使用 label + stop_labels 的旧逻辑兜底。
+
+例子：
 {
-  "key": "project",
-  "keywords": ["樊华似锦2期", "樊华广场"],
-  "fallback": ""
+  "enable_stop_label_match": true
 }
 
-含义：OCR 文字里出现哪个关键词，就返回哪个关键词。
+6. stop_labels：旧标签匹配的结束标记
+只有 enable_stop_label_match 为 true 时才主要参与字段提取。
 
-6. fallback：识别不到时的备用值
-如果 fallback 是空字符串，识别不到就留空。
-
-配置例子：
-{
-  "key": "content",
-  "label": "施工内容",
-  "fallback": "未识别内容"
-}
-
-7. filename_template：文件名模板
-例子：
-{project}_{area}_{datetime}_{content}
-
-如果识别结果是：
-project = 樊华似锦2期
-area = 5层
-datetime = 2026.05.04 04:01
-content = 暗门维修
-
-文件名会类似：
-樊华似锦2期_5层_2026.05.04 04_01_暗门维修.jpg
-
-8. folder_template：文件夹模板
-例子：
-{project}/{area}/{date}/{content}
-
-含义：按项目、区域、日期、施工内容创建多层文件夹。
-
-如果不想按区域分层，可以改成：
-{project}/{date}/{content}
-
-9. stop_labels：字段结束标记
 例子：
 ["施工区域", "施工内容", "天气", "地点"]
 
-含义：提取“施工区域”时，遇到“施工内容/天气/地点”就停止，避免把后面的文字也吞进去。
+含义：提取“施工区域”时，遇到“施工内容/天气/地点”等内容就停止。
 
-10. avoid_keyword_fields：避免关键字快速匹配的字段
-例子：
-["area", "content"]
+7. replace_with：匹配成功后替换为固定内容
+适合 OCR 里项目名写法不稳定，但最终想统一成一个标准项目名。
 
-含义：勾选后的字段不会使用 keywords 快速匹配，默认避免匹配 area 和 content。
-
-11. replace_with：匹配成功后替换为固定内容
 例子：
 {
   "key": "project",
-  "prefix_until_keywords": ["海悦银河城"],
-  "replace_with": "海悦银河城项目"
+  "prefix_until_keywords": ["樊华似锦"],
+  "replace_with": "樊华似锦项目"
 }
 
-含义：project 匹配成功后，最终项目名会替换为 replace_with 填写的固定内容。
+8. filename_template：文件名模板
+例子：
+{project}_{area}_{datetime}_{content}
+
+9. folder_template：文件夹模板
+例子：
+{project}/{area}/{date}/{content}
+
+如果不想创建多层子文件夹，可以在界面勾选“不创建子文件夹”，或修改模板。
+
+10. avoid_keyword_fields：避免 keywords 快速匹配的字段
+保留用于兼容旧配置；当前新逻辑里 project 主要使用关键字，area/content 默认不会因 label 自动提取，除非开启停止标签匹配。
 """
