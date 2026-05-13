@@ -21,6 +21,13 @@ from .config_help import CONFIG_HELP_TEXT
 # gui/app.py 是给普通用户使用的图形外壳。
 # 它不重新实现整理逻辑，只把界面上的选项转换成 processor/folder_matcher 的参数。
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+GUI_STATE_PATH = PROJECT_ROOT / ".gui_state.json"
+GUI_STATE_FIELDS = {
+    "input_dir": "input_var",
+    "output_dir": "output_var",
+    "config_path": "config_var",
+    "tesseract_path": "tesseract_var",
+}
 
 class QueueWriter:
     """把 print 输出转发到队列，供主线程安全写入界面。"""
@@ -71,7 +78,10 @@ class App(tk.Tk):
         self.stop_label_match_var = tk.BooleanVar(value=False)
         self.default_date_enabled_var = tk.BooleanVar(value=True)
 
+        self.load_gui_state()
+        self.detected_tesseract = self.get_tesseract_cmd()
         self.build_ui()
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.load_config_state()
         if not self.detected_tesseract:
             self.preprocess_var.set(False)
@@ -166,15 +176,24 @@ class App(tk.Tk):
 
     # 打开文件夹选择框，并把结果写回指定变量。
     def choose_folder(self, variable: tk.StringVar) -> None:
-        selected = filedialog.askdirectory(title="请选择文件夹")
+        selected = filedialog.askdirectory(
+            title="请选择文件夹",
+            initialdir=self.get_dialog_initialdir(variable.get()),
+        )
         if selected:
             variable.set(selected)
+            self.save_gui_state()
 
     # 打开 config.json 选择框，并把结果写回配置路径。
     def choose_config(self) -> None:
-        selected = filedialog.askopenfilename(title="请选择配置文件", filetypes=[("JSON 文件", "*.json"), ("所有文件", "*.*")])
+        selected = filedialog.askopenfilename(
+            title="请选择配置文件",
+            initialdir=self.get_dialog_initialdir(self.config_var.get()),
+            filetypes=[("JSON 文件", "*.json"), ("所有文件", "*.*")],
+        )
         if selected:
             self.config_var.set(selected)
+            self.save_gui_state()
             self.load_config_state()
 
     # 读取当前配置文件内容，并打开配置编辑窗口。
@@ -218,6 +237,7 @@ class App(tk.Tk):
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
         self.config_var.set(str(config_path.resolve()))
+        self.save_gui_state()
 
     def load_config_state(self) -> None:
         """从配置文件同步主窗口上的快捷配置状态。"""
@@ -346,9 +366,14 @@ class App(tk.Tk):
 
     # 打开 tesseract.exe 选择框，并同步更新 OCR 预处理可用状态。
     def choose_tesseract(self) -> None:
-        selected = filedialog.askopenfilename(title="请选择 tesseract.exe", filetypes=[("EXE 文件", "*.exe"), ("所有文件", "*.*")])
+        selected = filedialog.askopenfilename(
+            title="请选择 tesseract.exe",
+            initialdir=self.get_dialog_initialdir(self.tesseract_var.get()),
+            filetypes=[("EXE 文件", "*.exe"), ("所有文件", "*.*")],
+        )
         if selected:
             self.tesseract_var.set(selected)
+            self.save_gui_state()
             self.detected_tesseract = find_tesseract_cmd(Path(selected))
             if not self.detected_tesseract:
                 self.preprocess_var.set(False)
@@ -386,6 +411,7 @@ class App(tk.Tk):
             messagebox.showinfo("正在运行", "当前任务还没有结束。")
             return
 
+        self.save_gui_state()
         try:
             options = self.collect_options()
         except ValueError as exc:
@@ -510,6 +536,50 @@ class App(tk.Tk):
     # 清空输出文本框。
     def clear_output(self) -> None:
         self.output_text.delete("1.0", "end")
+
+    def load_gui_state(self) -> None:
+        """恢复上次 GUI 选择过的路径。"""
+        if not GUI_STATE_PATH.exists():
+            return
+
+        try:
+            state = json.loads(GUI_STATE_PATH.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(state, dict):
+            return
+
+        for key, variable_name in GUI_STATE_FIELDS.items():
+            value = state.get(key)
+            if isinstance(value, str) and value.strip():
+                getattr(self, variable_name).set(value)
+
+    def save_gui_state(self) -> None:
+        """保存当前 GUI 路径，供下次打开时恢复。"""
+        state = {
+            "input_dir": self.input_var.get().strip(),
+            "output_dir": self.output_var.get().strip(),
+            "config_path": self.config_var.get().strip(),
+            "tesseract_path": self.tesseract_var.get().strip(),
+        }
+        try:
+            GUI_STATE_PATH.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as exc:
+            self.write_output(f"[配置] GUI 路径状态保存失败：{exc}\n")
+
+    def get_dialog_initialdir(self, value: str) -> str:
+        """给选择窗口提供一个可用的初始目录。"""
+        path = Path(value).expanduser() if value.strip() else PROJECT_ROOT
+        if path.exists():
+            initial = path if path.is_dir() else path.parent
+        else:
+            initial = path.parent
+        return str(initial if initial.exists() else PROJECT_ROOT)
+
+    def on_close(self) -> None:
+        """关闭窗口前保存当前路径输入。"""
+        self.save_gui_state()
+        self.destroy()
 
     # 根据界面路径或系统环境返回可用的 tesseract.exe。
     def get_tesseract_cmd(self) -> Path | None:
